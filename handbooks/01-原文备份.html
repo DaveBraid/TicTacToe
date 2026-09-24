@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>自定义 Gym 环境</title><style>
+body{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,sans-serif;color:#222}
+img{max-width:100%;height:auto} pre{overflow:auto;padding:1rem;background:#f5f5f5} code{overflow-wrap:anywhere}
+table{border-collapse:collapse}td,th{border:1px solid #aaa;padding:.35rem}.source{border-top:1px solid #ccc;margin-top:3rem}
+
+.chapter-nav{display:flex;justify-content:space-between;gap:1rem;margin:2rem 0 1rem}
+.chapter-nav a{display:inline-block;padding:.65rem 1rem;border:1px solid #ccd6e0;border-radius:.5rem;background:#f4f8fc;color:#174a76;text-decoration:none}
+.chapter-nav a:hover,.chapter-nav a:focus-visible{background:#e5f1fb;border-color:#77a8d3}
+.chapter-nav .next{margin-left:auto;text-align:right}
+</style></head><body><h1>自定义 Gym 环境</h1>
+<p>离线备份于 2026-09-24 · <a href="https://www.cnblogs.com/wsy950409/p/15645049.html">原文地址</a> · <a href="README.md">学习路线</a></p>
+<main>
+<p>新手的第一个强化学习示例一般都从Open Gym开始。在这些示例中，我们不断地向环境施加动作，并得到观测和奖励，这也是Gym Env的基本用法：</p>
+<div class="cnblogs_code">
+<pre>state, reward, done, info = env.step(action)</pre>
+</div>
+<p>&nbsp;其中state是agent的观测状态，reward是采取了action之后环境返回的奖励，done是判断后继状态是否是终止状态的flag，info是一些自定义的消息。</p>
+<p>当后继状态是终止状态时，需要重置环境，使之回到初始状态：</p>
+<div class="cnblogs_code">
+<pre>env.reset()</pre>
+</div>
+<p>如果我们要构建自己的强化学习问题该怎么办呢？第一步就是自定义环境。接下来，我们就以以上两个基本用法为目标，自定义一个Gym下的简单环境：</p>
+<table style="height: 67px; width: 81px" border="0">
+<tbody>
+<tr>
+<td>S0</td>
+<td>S1</td>
+<td>S2</td>
+</tr>
+<tr>
+<td>-1</td>
+<td>-1</td>
+<td>10</td>
+</tr>
+</tbody>
+</table>
+<p>初始状态S0，终止状态S2，抵达状态S0 S1 S2的奖励分别为-1，-1和10，agent有向左和向右两个动作。</p>
+<h2>步骤1：创建文件夹和文件</h2>
+<p>本人为了做深度学习，使用conda的环境管理功能创建了名为 pytorch1.1的环境，于是来到目录：D:\Anaconda\envs\pytorch1.1\Lib\site-packages\gym\envs</p>
+<p>创建文件夹 user ，用于专门存放自定义的环境，然后进入该目录：D:\Anaconda\envs\pytorch1.1\Lib\site-packages\gym\envs\user，创建文件 __init__.py 和 basic_env.py。</p>
+<p>当然，也可以直接在默认的root环境下操作。来到目录：D:\Anaconda\Lib\site-packages\gym\envs，创建文件夹user，进入该目录D:\Anaconda\Lib\site-packages\gym\envs\user，创建文件 __init__.py 和 basic_env.py。</p>
+<h2>步骤2：编写 basic_env.py 和 __init__.py</h2>
+<p>basic_env是我们要写的简单环境示例的文件名，内容如下：</p>
+<div class="cnblogs_code">
+<pre><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> gym
+</span><span style="color: rgba(0, 0, 255, 1)">class</span><span style="color: rgba(0, 0, 0, 1)"> BasicEnv(gym.Env):
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> <span style="color: rgba(128, 0, 128, 1)">__init__</span><span style="color: rgba(0, 0, 0, 1)">(self):    
+        self.action_space </span>= [<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">left</span><span style="color: rgba(128, 0, 0, 1)">'</span>, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">right</span><span style="color: rgba(128, 0, 0, 1)">'</span>] <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 动作空间</span>
+        self.state_space = [<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s0</span><span style="color: rgba(128, 0, 0, 1)">'</span>, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s1</span><span style="color: rgba(128, 0, 0, 1)">'</span>, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s2</span><span style="color: rgba(128, 0, 0, 1)">'</span>] <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 状态空间</span>
+        self.state_transition = { <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 状态转移表</span>
+            <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s0</span><span style="color: rgba(128, 0, 0, 1)">'</span>: {<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">left</span><span style="color: rgba(128, 0, 0, 1)">'</span>:<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s0</span><span style="color: rgba(128, 0, 0, 1)">'</span>, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">right</span><span style="color: rgba(128, 0, 0, 1)">'</span>:<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s1</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">},
+            </span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s1</span><span style="color: rgba(128, 0, 0, 1)">'</span>: {<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">left</span><span style="color: rgba(128, 0, 0, 1)">'</span>:<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s0</span><span style="color: rgba(128, 0, 0, 1)">'</span>, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">right</span><span style="color: rgba(128, 0, 0, 1)">'</span>:<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s2</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">}
+        }
+        self.reward </span>= {<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s0</span><span style="color: rgba(128, 0, 0, 1)">'</span>:-1, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s1</span><span style="color: rgba(128, 0, 0, 1)">'</span>:-1, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s2</span><span style="color: rgba(128, 0, 0, 1)">'</span>:10} <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 奖励</span>
+        self.state = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s0</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+            
+    <span style="color: rgba(0, 0, 255, 1)">def</span><span style="color: rgba(0, 0, 0, 1)"> step(self, action):
+        next_state </span>=  self.state_transition[self.state][action] <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 通过两个关键字查找状态转移表中的后继状态</span>
+        self.state =<span style="color: rgba(0, 0, 0, 1)"> next_state
+        reward </span>=<span style="color: rgba(0, 0, 0, 1)"> self.reward[next_state]
+        </span><span style="color: rgba(0, 0, 255, 1)">if</span> next_state == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s2</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:
+            done </span>=<span style="color: rgba(0, 0, 0, 1)"> True
+        </span><span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)">:
+            done </span>=<span style="color: rgba(0, 0, 0, 1)"> False
+        info </span>=<span style="color: rgba(0, 0, 0, 1)"> {}
+        </span><span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> next_state, reward, done, info
+                           
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span><span style="color: rgba(0, 0, 0, 1)"> reset(self):
+        self.state </span>= <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">s0</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+        <span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> self.state
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> render(self, mode=<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">human</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">):
+        draw </span>= [<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">-</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">for</span> i <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> range(len(self.state_space))]
+        draw[self.state_space.index(self.state)] </span>= <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">o</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">
+        draw </span>= <span style="color: rgba(128, 0, 0, 1)">''</span><span style="color: rgba(0, 0, 0, 1)">.join(draw)
+        </span><span style="color: rgba(0, 0, 255, 1)">print</span>(draw)</pre>
+</div>
+<p>__init__.py是引入环境类的入口函数，写入：</p>
+<div class="cnblogs_code">
+<pre><span style="color: rgba(0, 0, 255, 1)">from</span> gym.envs.user.basic_env <span style="color: rgba(0, 0, 255, 1)">import</span> BasicEnv</pre>
+</div>
+<h2>步骤3：注册环境</h2>
+<p>来到目录：D:\Anaconda\envs\pytorch1.1\Lib\site-packages\gym，所有的环境都在__init__.py文件中注册，打开这个文件，发现很多类似这样的代码：</p>
+<div class="cnblogs_code">
+<pre><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> Toy Text</span><span style="color: rgba(0, 128, 0, 1)">
+#</span><span style="color: rgba(0, 128, 0, 1)"> ----------------------------------------</span>
+<span style="color: rgba(0, 0, 0, 1)">
+register(
+    id</span>=<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">Blackjack-v1</span><span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(0, 0, 0, 1)">,
+    entry_point</span>=<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">gym.envs.toy_text:BlackjackEnv</span><span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(0, 0, 0, 1)">,
+    kwargs</span>={<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">sab</span><span style="color: rgba(128, 0, 0, 1)">"</span>: True, <span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">natural</span><span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(0, 0, 0, 1)">: False},
+)
+
+register(
+    id</span>=<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">FrozenLake-v1</span><span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(0, 0, 0, 1)">,
+    entry_point</span>=<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">gym.envs.toy_text:FrozenLakeEnv</span><span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(0, 0, 0, 1)">,
+    kwargs</span>={<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">map_name</span><span style="color: rgba(128, 0, 0, 1)">"</span>: <span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">4x4</span><span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(0, 0, 0, 1)">},
+    max_episode_steps</span>=100<span style="color: rgba(0, 0, 0, 1)">,
+    reward_threshold</span>=0.70,  <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> optimum = 0.74</span>
+<span style="color: rgba(0, 0, 0, 1)">)
+
+register(
+    id</span>=<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">FrozenLake8x8-v1</span><span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(0, 0, 0, 1)">,
+    entry_point</span>=<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">gym.envs.toy_text:FrozenLakeEnv</span><span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(0, 0, 0, 1)">,
+    kwargs</span>={<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">map_name</span><span style="color: rgba(128, 0, 0, 1)">"</span>: <span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">8x8</span><span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(0, 0, 0, 1)">},
+    max_episode_steps</span>=200<span style="color: rgba(0, 0, 0, 1)">,
+    reward_threshold</span>=0.85,  <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> optimum = 0.91</span>
+)</pre>
+</div>
+<p>模仿这个格式，我们添加自己的代码，注册自己的环境：</p>
+<div class="cnblogs_code">
+<pre><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> User</span><span style="color: rgba(0, 128, 0, 1)">
+#</span><span style="color: rgba(0, 128, 0, 1)"> ----------------------------------------</span>
+<span style="color: rgba(0, 0, 0, 1)">register(
+    id</span>=<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">BasicEnv-v0</span><span style="color: rgba(128, 0, 0, 1)">"</span>, <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 环境名</span>
+    entry_point=<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">gym.envs.user:BasicEnv</span><span style="color: rgba(128, 0, 0, 1)">"</span>, <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)">接口</span>
+    reward_threshold=10, <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 奖励阈值</span>
+    max_episode_steps=10, <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 最大步长</span>
+)</pre>
+</div>
+<p>注册了的环境，可以通过向gym的通用接口写入环境名创建。除了环境名和接口两个基本信息外，奖励阈值和最大步长则是与训练相关的参数，还可以自行添加其他参数。</p>
+<h2>步骤4：测试环境</h2>
+<p>在测试代码中，我们设置了一个主循环，让agent随机选择向左或向右，直到抵达终止状态，或达到了在注册环境中设置的最大步长max_episode_steps（实现方式是使得done = True），代码如下：</p>
+<div class="cnblogs_code">
+<pre><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> gym
+</span><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> random
+</span><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> time
+
+</span><span style="color: rgba(0, 0, 255, 1)">from</span> gym <span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> envs
+</span><span style="color: rgba(0, 0, 255, 1)">print</span>(envs.registry.all()) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 查看所有已注册的环境</span>
+<span style="color: rgba(0, 0, 0, 1)">
+env </span>= gym.make(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">BasicEnv-v0</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">)
+env.reset() </span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 在第一次step前要先重置环境 不然会报错</span>
+action_space =<span style="color: rgba(0, 0, 0, 1)"> env.action_space
+</span><span style="color: rgba(0, 0, 255, 1)">while</span><span style="color: rgba(0, 0, 0, 1)"> True:
+    action </span>= random.choice(action_space) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 随机动作</span>
+    state, reward, done, info =<span style="color: rgba(0, 0, 0, 1)"> env.step(action)
+    </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">reward: %d</span><span style="color: rgba(128, 0, 0, 1)">'</span> %<span style="color: rgba(0, 0, 0, 1)"> reward)
+    env.render()
+    time.sleep(</span>0.5<span style="color: rgba(0, 0, 0, 1)">)
+    </span><span style="color: rgba(0, 0, 255, 1)">if</span> done: <span style="color: rgba(0, 0, 255, 1)">break</span></pre>
+</div>
+<p>&nbsp;效果如下：</p>
+<p><img src="assets/01/01.gif" alt="" loading="lazy"></p>
+<p id="1638676674365">&nbsp;</p>
+
+</main><p class="source">原文作者：埠默笙声声声脉。转载来源：<a href="https://www.cnblogs.com/wsy950409/p/15645049.html">https://www.cnblogs.com/wsy950409/p/15645049.html</a></p>
+<nav class="chapter-nav" aria-label="文章导航"><a class="previous" href="README.md">← 返回学习目录</a><a class="next" href="02-原文备份.html">下一篇：井字棋环境 →</a></nav>
+</body></html>

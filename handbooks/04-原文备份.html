@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>开始训练</title><style>
+body{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,sans-serif;color:#222}
+img{max-width:100%;height:auto} pre{overflow:auto;padding:1rem;background:#f5f5f5} code{overflow-wrap:anywhere}
+table{border-collapse:collapse}td,th{border:1px solid #aaa;padding:.35rem}.source{border-top:1px solid #ccc;margin-top:3rem}
+
+.chapter-nav{display:flex;justify-content:space-between;gap:1rem;margin:2rem 0 1rem}
+.chapter-nav a{display:inline-block;padding:.65rem 1rem;border:1px solid #ccd6e0;border-radius:.5rem;background:#f4f8fc;color:#174a76;text-decoration:none}
+.chapter-nav a:hover,.chapter-nav a:focus-visible{background:#e5f1fb;border-color:#77a8d3}
+.chapter-nav .next{margin-left:auto;text-align:right}
+</style></head><body><h1>开始训练</h1>
+<p>离线备份于 2026-09-24 · <a href="https://www.cnblogs.com/wsy950409/p/15665291.html">原文地址</a> · <a href="README.md">学习路线</a></p>
+<main>
+<p>在 <a href="03-原文备份.html" target="_blank">强化学习实战 | 表格型Q-Learning玩井字棋（一）搭个框架</a> 中，我们构建了以Game() 和 Agent() 类为基础的框架，本篇我们要让agent不断对弈，维护Q表格，提升棋力。那么我们先来盘算一下这几个问题：</p>
+<ul>
+<li><strong>Q1：</strong>作为陪练的一方，策略上有什么要求吗？</li>
+<li><strong>A1：</strong>有，出棋所导致的状态要完全覆盖所有可能状态。满足此条件下，陪练的棋力越强（等同于环境越严苛），agent训练的效果越好。AlphaGo的例子告诉我们，陪练的策略也是可以分阶段调整的：前期先用人类落子的预测模型当陪练，中后期让agent自我博弈。在井字棋的例子中，环境较简单，可以直接让agent自我博弈，采用 ε-greedy 策略（贪心地选择Q值最大的动作执行，并以 ε 的概率试探其他的动作）即可实现可能状态的覆盖。</li>
+<li><strong>Q2：</strong>采用自我博弈的方式，也就意味着，在陪练动作前，也要调用Q表格，是吗？</li>
+<li><strong>A2：</strong>是，不仅是调用，如果当前状态不在Q表格中，还要往Q表格中新增状态，否则无法将执行 ε-greedy 策略。</li>
+<li><strong>Q3：</strong>而且陪练动作之后，还要更新Q表格？</li>
+<li><strong>A3：</strong>是。</li>
+<li><strong>Q4：</strong>环境的定义是以一方的视角分配奖励的，对于陪练来说，不能简单地调用Q表格进行决策吧？假设agent是蓝方，陪练是红方，直接用Q表进行决策，那么红方就是以自身落蓝字进行考虑的，所考虑的状态完全是非法的——例如场上仅有一个蓝子，此刻又是待落蓝子。</li>
+<li><strong>A4：</strong>对，不能简单调用！在陪练动作前，要把视角翻转——如果当前状态是 [1, -1, 0, 0, 0, 0, 0, 0, 1]，翻转就是把当前状态<strong>视作</strong> [-1, 1, 0, 0, 0, 0, 0, 0, -1]，再考虑自身如何落蓝子。</li>
+</ul>
+<p>再回想一下Q-Learning算法：</p>
+<p><img src="assets/04/01.png" alt="" width="700" height="207" loading="lazy" style="display: block; margin-left: auto; margin-right: auto"></p>
+<p>细节也就逐渐清晰了，我们要实现的目标如下：</p>
+<ol>
+<li>维护记录蓝方上一状态，动作及奖励的变量组 <strong>lastState_blue</strong>，<strong>lastAction_blue</strong>，<strong>lastReward_blue</strong>；维护记录红方上一状态，动作及奖励的变量组 <strong>lastState_red，</strong><strong>lastAction_red</strong>，<strong>lastReward_red</strong>。（要时刻注意，一方行动之后的状态并不是自身的后继状态，而是进入对手的新状态，只有当自身再次行动时，此时的状态才是后继状态：S<sup>0</sup><sub>blue</sub>&nbsp;→ A<sup>0</sup><sub>blue</sub>&nbsp;→&nbsp;S<sup>0</sup><sub>red</sub>&nbsp;→ A<sup>0</sup><sub>red</sub> →&nbsp;S<sup>1</sup><sub>blue</sub>&nbsp; →&nbsp;A<sup>1</sup><sub>blue</sub>&nbsp; →&nbsp;S<sup>1</sup><sub>red</sub> →&nbsp;&nbsp;A<sup>1</sup><sub>red</sub>&nbsp; →&nbsp;S<sup>2</sup><sub>blue</sub>&nbsp;<strong>→</strong> …，Q表中的状态数是<strong>4520</strong>，大于这个数字说明代码一定是哪里写错了）&nbsp;</li>
+<li>构建一个 ε-greedy 策略函数&nbsp;<strong>epsilon_greedy(env)</strong>，并区分蓝/红方，红方（陪练）动作时，把当前状态翻转。</li>
+<li>构建一个往Q表格新增状态的函数 <strong>addNewState(env)</strong>, 并区分蓝/红方，红方调用时，把当前状态翻转。　　</li>
+<li>构建一个更新Q表格状态价值的函数 <strong>updateQtable(env)</strong>，可以选择锁定蓝方视角：蓝方行动前调用，也可以选择蓝方和红方视角下都调用（红方调用时需要翻转状态），可以想到，这样的双向调用在相同轮次内更新的状态更多。另一个加快更新的方法是考虑等价的棋局，翻转或旋转运动可以创造等价的7个棋局（见下图），分别是：旋转90°，旋转180°，旋转270° ，垂直翻转，水平翻转，旋转90°+垂直翻转，旋转90°+水平翻转。双向更新+等价棋局同步更新，这样我们就能在一轮对局中更新 2×8=16 个Q值，大大提高了更新速度。　　</li>
+</ol>
+<p><img src="assets/04/02.png" alt="" width="475" height="270" loading="lazy" style="display: block; margin-left: auto; margin-right: auto"></p>
+<p id="1639011464038">&nbsp;秉着“先跑通，再优化”的信条，先实现蓝红两方的双向更新，等价棋局更新这个任务就下次一定啦。整体代码如下：</p>
+<div class="cnblogs_code"><img src="assets/04/03.gif" id="code_img_closed_1ade1919-99e6-4cdb-9305-64a8c3370c7f" class="code_img_closed"><img src="assets/04/04.gif" id="code_img_opened_1ade1919-99e6-4cdb-9305-64a8c3370c7f" class="code_img_opened" style="display: none">
+<div id="cnblogs_code_open_1ade1919-99e6-4cdb-9305-64a8c3370c7f" class="cnblogs_code_hide">
+<pre><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> gym
+</span><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> random
+</span><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> time
+
+</span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 查看所有已注册的环境</span><span style="color: rgba(0, 128, 0, 1)">
+#</span><span style="color: rgba(0, 128, 0, 1)"> from gym import envs</span><span style="color: rgba(0, 128, 0, 1)">
+#</span><span style="color: rgba(0, 128, 0, 1)"> print(envs.registry.all()) </span>
+
+<span style="color: rgba(0, 0, 255, 1)">def</span> str2tuple(string): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> Input: '(1,1)'</span>
+    string2list =<span style="color: rgba(0, 0, 0, 1)"> list(string)
+    </span><span style="color: rgba(0, 0, 255, 1)">return</span> ( int(string2list[1]), int(string2list[4]) ) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> Output: (1,1)</span>
+
+<span style="color: rgba(0, 0, 255, 1)">class</span><span style="color: rgba(0, 0, 0, 1)"> Game():
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> <span style="color: rgba(128, 0, 128, 1)">__init__</span><span style="color: rgba(0, 0, 0, 1)">(self, env):
+        self.INTERVAL </span>= 0 <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 行动间隔</span>
+        self.RENDER = False <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 是否显示游戏过程</span>
+        self.first = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">if</span> random.random() &gt; 0.5 <span style="color: rgba(0, 0, 255, 1)">else</span> <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 随机先后手</span>
+        self.currentMove =<span style="color: rgba(0, 0, 0, 1)"> self.first
+        self.env </span>=<span style="color: rgba(0, 0, 0, 1)"> env
+        self.agent </span>=<span style="color: rgba(0, 0, 0, 1)"> Agent()
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> switchMove(self): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 切换行动玩家</span>
+        move =<span style="color: rgba(0, 0, 0, 1)"> self.currentMove
+        </span><span style="color: rgba(0, 0, 255, 1)">if</span> move == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>: self.currentMove = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+        <span style="color: rgba(0, 0, 255, 1)">elif</span> move == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span>: self.currentMove = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+    
+    <span style="color: rgba(0, 0, 255, 1)">def</span> newGame(self): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 新建游戏</span>
+        self.first = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">if</span> random.random() &gt; 0.5 <span style="color: rgba(0, 0, 255, 1)">else</span> <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">
+        self.currentMove </span>=<span style="color: rgba(0, 0, 0, 1)"> self.first
+        self.env.reset()
+        self.agent.reset()
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> run(self): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 玩一局游戏</span>
+        self.env.reset() <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 在第一次step前要先重置环境，不然会报错</span>
+        <span style="color: rgba(0, 0, 255, 1)">while</span><span style="color: rgba(0, 0, 0, 1)"> True:
+            </span><span style="color: rgba(0, 0, 255, 1)">print</span>(f<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">--currentMove: {self.currentMove}--</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">)
+            self.agent.updateQtable(self.env, self.currentMove, False)
+            
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span> self.currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:
+                self.agent.lastState_blue </span>=<span style="color: rgba(0, 0, 0, 1)"> self.env.state.copy()
+            </span><span style="color: rgba(0, 0, 255, 1)">elif</span> self.currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:
+                self.agent.lastState_red </span>= self.agent.overTurn(self.env.state) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 红方视角需将状态翻转</span>
+<span style="color: rgba(0, 0, 0, 1)">                
+            action </span>=<span style="color: rgba(0, 0, 0, 1)"> self.agent.epsilon_greedy(self.env, self.currentMove)
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span> self.currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:
+                self.agent.lastAction_blue </span>= action[<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">pos</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">]
+            </span><span style="color: rgba(0, 0, 255, 1)">elif</span> self.currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:
+                self.agent.lastAction_red </span>= action[<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">pos</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">]
+            
+            state, reward, done, info </span>=<span style="color: rgba(0, 0, 0, 1)"> self.env.step(action)
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> done:
+                self.agent.lastReward_blue </span>=<span style="color: rgba(0, 0, 0, 1)"> reward
+                self.agent.lastReward_red </span>= -1 *<span style="color: rgba(0, 0, 0, 1)"> reward
+                self.agent.updateQtable(self.env, self.currentMove, True)
+            </span><span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)">:     
+                </span><span style="color: rgba(0, 0, 255, 1)">if</span> self.currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:
+                    self.agent.lastReward_blue </span>=<span style="color: rgba(0, 0, 0, 1)"> reward
+                </span><span style="color: rgba(0, 0, 255, 1)">elif</span> self.currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:
+                    self.agent.lastReward_red </span>= -1 *<span style="color: rgba(0, 0, 0, 1)"> reward
+            
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> self.RENDER: self.env.render()
+            self.switchMove()
+            time.sleep(self.INTERVAL)
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> done:
+                self.newGame()
+                </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> self.RENDER: self.env.render()
+                time.sleep(self.INTERVAL)
+                </span><span style="color: rgba(0, 0, 255, 1)">break</span>
+                    
+<span style="color: rgba(0, 0, 255, 1)">class</span><span style="color: rgba(0, 0, 0, 1)"> Agent():
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> <span style="color: rgba(128, 0, 128, 1)">__init__</span><span style="color: rgba(0, 0, 0, 1)">(self):
+        self.Q_table </span>=<span style="color: rgba(0, 0, 0, 1)"> {}
+        self.EPSILON </span>= 0.05<span style="color: rgba(0, 0, 0, 1)">
+        self.ALPHA </span>= 0.5<span style="color: rgba(0, 0, 0, 1)">
+        self.GAMMA </span>= 1 <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 折扣因子</span>
+        self.lastState_blue =<span style="color: rgba(0, 0, 0, 1)"> None
+        self.lastAction_blue </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+        self.lastReward_blue </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+        self.lastState_red </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+        self.lastAction_red </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+        self.lastReward_red </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span><span style="color: rgba(0, 0, 0, 1)"> reset(self):
+        self.lastState_blue </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+        self.lastAction_blue </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+        self.lastReward_blue </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+        self.lastState_red </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+        self.lastAction_red </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+        self.lastReward_red </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> getEmptyPos(self, env_): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 返回空位的坐标</span>
+        action_space =<span style="color: rgba(0, 0, 0, 1)"> []
+        </span><span style="color: rgba(0, 0, 255, 1)">for</span> i, row <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> enumerate(env_.state):
+            </span><span style="color: rgba(0, 0, 255, 1)">for</span> j, one <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> enumerate(row):
+                </span><span style="color: rgba(0, 0, 255, 1)">if</span> one ==<span style="color: rgba(0, 0, 0, 1)"> 0: action_space.append((i,j)) 
+        </span><span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> action_space
+        
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> randomAction(self, env_, mark): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 随机选择空格动作</span>
+        actions =<span style="color: rgba(0, 0, 0, 1)"> self.getEmptyPos(env_)
+        action_pos </span>=<span style="color: rgba(0, 0, 0, 1)"> random.choice(actions)
+        action </span>= {<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">mark</span><span style="color: rgba(128, 0, 0, 1)">'</span>:mark, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">pos</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:action_pos}
+        </span><span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> action
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> overTurn(self, state): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 翻转状态</span>
+        state_ =<span style="color: rgba(0, 0, 0, 1)"> state.copy()
+        </span><span style="color: rgba(0, 0, 255, 1)">for</span> i, row <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> enumerate(state_):
+            </span><span style="color: rgba(0, 0, 255, 1)">for</span> j, one <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> enumerate(row):
+                </span><span style="color: rgba(0, 0, 255, 1)">if</span> one != 0: state_[i][j] *= -1
+        <span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> state_
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> addNewState(self, env_, currentMove): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 若当前状态不在Q表中，则新增状态</span>
+         state = env_.state <span style="color: rgba(0, 0, 255, 1)">if</span> currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">else</span> self.overTurn(env_.state) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 如果是红方行动则翻转状态</span>
+         <span style="color: rgba(0, 0, 255, 1)">if</span> str(state) <span style="color: rgba(0, 0, 255, 1)">not</span> <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> self.Q_table:
+             self.Q_table[str(state)] </span>=<span style="color: rgba(0, 0, 0, 1)"> {}
+             actions </span>=<span style="color: rgba(0, 0, 0, 1)"> self.getEmptyPos(env_)
+             </span><span style="color: rgba(0, 0, 255, 1)">for</span> action <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> actions:
+                 self.Q_table[str(state)][str(action)] </span>=<span style="color: rgba(0, 0, 0, 1)"> 0
+        
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> epsilon_greedy(self, env_, currentMove): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> ε-贪心策略</span>
+        state = env_.state <span style="color: rgba(0, 0, 255, 1)">if</span> currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">else</span> self.overTurn(env_.state) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 如果是红方行动则翻转状态</span>
+        Q_Sa =<span style="color: rgba(0, 0, 0, 1)"> self.Q_table[str(state)]
+        maxAction, maxValue, otherAction </span>= [], -100<span style="color: rgba(0, 0, 0, 1)">, [] 
+        </span><span style="color: rgba(0, 0, 255, 1)">for</span> one <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> Q_Sa:
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span> Q_Sa[one] &gt;<span style="color: rgba(0, 0, 0, 1)"> maxValue:
+                maxValue </span>=<span style="color: rgba(0, 0, 0, 1)"> Q_Sa[one]
+        </span><span style="color: rgba(0, 0, 255, 1)">for</span> one <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> Q_Sa:
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span> Q_Sa[one] ==<span style="color: rgba(0, 0, 0, 1)"> maxValue:
+                maxAction.append(str2tuple(one))
+            </span><span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)">:
+                otherAction.append(str2tuple(one))
+        
+        </span><span style="color: rgba(0, 0, 255, 1)">try</span><span style="color: rgba(0, 0, 0, 1)">:
+            action_pos </span>= random.choice(maxAction) <span style="color: rgba(0, 0, 255, 1)">if</span> random.random() &gt; self.EPSILON <span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)"> random.choice(otherAction)
+        </span><span style="color: rgba(0, 0, 255, 1)">except</span>: <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 处理从空的otherAction中取值的情况</span>
+            action_pos =<span style="color: rgba(0, 0, 0, 1)"> random.choice(maxAction) 
+        action </span>= {<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">mark</span><span style="color: rgba(128, 0, 0, 1)">'</span>:currentMove, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">pos</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:action_pos}
+        </span><span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> action
+    
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span><span style="color: rgba(0, 0, 0, 1)"> updateQtable(self, env_, currentMove, done_):
+        
+        judge </span>= (currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">and</span> self.lastState_blue <span style="color: rgba(0, 0, 255, 1)">is</span> None) <span style="color: rgba(0, 0, 255, 1)">or</span><span style="color: rgba(0, 0, 0, 1)"> \
+                (currentMove </span>== <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">and</span> self.lastState_red <span style="color: rgba(0, 0, 255, 1)">is</span><span style="color: rgba(0, 0, 0, 1)"> None)
+        </span><span style="color: rgba(0, 0, 255, 1)">if</span> judge: <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 边界情况1：若agent无上一状态，说明是游戏中首次动作，那么只需要新增状态就好，无需更新Q值</span>
+<span style="color: rgba(0, 0, 0, 1)">            self.addNewState(env_, currentMove)
+            </span><span style="color: rgba(0, 0, 255, 1)">return</span>
+                
+        <span style="color: rgba(0, 0, 255, 1)">if</span> done_: <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 边界情况2：若当前状态S_是终止状态，则无需把S_添加至Q表格中，直接令maxQ_S_a = 0，并同时更新双方Q值</span>
+            <span style="color: rgba(0, 0, 255, 1)">for</span> one <span style="color: rgba(0, 0, 255, 1)">in</span> [<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">]:
+                S </span>= self.lastState_blue  <span style="color: rgba(0, 0, 255, 1)">if</span> one == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)"> self.lastState_red
+                a </span>= self.lastAction_blue <span style="color: rgba(0, 0, 255, 1)">if</span> one == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)"> self.lastAction_red 
+                R </span>= self.lastReward_blue <span style="color: rgba(0, 0, 255, 1)">if</span> one == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)"> self.lastReward_red
+                </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">lastState S:\n</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">, S)
+                </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">lastAction a: </span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">, a)
+                </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">lastReward R: </span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">, R)
+                maxQ_S_a </span>=<span style="color: rgba(0, 0, 0, 1)"> 0
+                self.Q_table[str(S)][str(a)] </span>= (1 - self.ALPHA) *<span style="color: rgba(0, 0, 0, 1)"> self.Q_table[str(S)][str(a)] \
+                                                </span>+ self.ALPHA * (R + self.GAMMA *<span style="color: rgba(0, 0, 0, 1)"> maxQ_S_a)
+                </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">Q(S,a) = </span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">, self.Q_table[str(S)][str(a)])
+            </span><span style="color: rgba(0, 0, 255, 1)">return</span>
+          
+        <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 其他情况下：Q表无当前状态则新增状态，否则直接更新Q值</span>
+<span style="color: rgba(0, 0, 0, 1)">        self.addNewState(env_, currentMove)
+        S_ </span>= env_.state <span style="color: rgba(0, 0, 255, 1)">if</span> currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)"> self.overTurn(env_.state)
+        S </span>= self.lastState_blue  <span style="color: rgba(0, 0, 255, 1)">if</span> currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)"> self.lastState_red
+        a </span>= self.lastAction_blue <span style="color: rgba(0, 0, 255, 1)">if</span> currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)"> self.lastAction_red 
+        R </span>= self.lastReward_blue <span style="color: rgba(0, 0, 255, 1)">if</span> currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)"> self.lastReward_red
+        Q_S_a </span>=<span style="color: rgba(0, 0, 0, 1)"> self.Q_table[str(S_)]
+        maxQ_S_a </span>= -100 
+        <span style="color: rgba(0, 0, 255, 1)">for</span> one <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> Q_S_a:
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span> Q_S_a[one] &gt;<span style="color: rgba(0, 0, 0, 1)"> maxQ_S_a:
+                maxQ_S_a </span>=<span style="color: rgba(0, 0, 0, 1)"> Q_S_a[one]
+        </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">lastState S:\n</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">, S)
+        </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">State S_:\n</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">, S_)
+        </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">lastAction a: </span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">, a)
+        </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">lastReward R: </span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">, R)
+        self.Q_table[str(S)][str(a)] </span>= (1 - self.ALPHA) *<span style="color: rgba(0, 0, 0, 1)"> self.Q_table[str(S)][str(a)] \
+                                        </span>+ self.ALPHA * (R + self.GAMMA *<span style="color: rgba(0, 0, 0, 1)"> maxQ_S_a)
+        </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">Q(S,a) = </span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">, self.Q_table[str(S)][str(a)])
+        </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">\n</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">)
+                                            
+env </span>= gym.make(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">TicTacToeEnv-v0</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">)
+game </span>=<span style="color: rgba(0, 0, 0, 1)"> Game(env)
+</span><span style="color: rgba(0, 0, 255, 1)">for</span> i <span style="color: rgba(0, 0, 255, 1)">in</span> range(100000<span style="color: rgba(0, 0, 0, 1)">):
+    </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">episode</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">, i)
+    game.run()
+Q_table </span>= game.agent.Q_table</pre>
+</div>
+<span class="cnblogs_code_collapse">View Code</span></div>
+<h2>测试</h2>
+<p>先跑个10万局游戏，看看大体的趋势对不对。</p>
+<h3>项目1：查看Q表格的状态数</h3>
+<p><img src="assets/04/05.png" alt="" loading="lazy"></p>
+<p id="1639028027174">略小于4520——这是可以理解的，因为agent大概率选择Q值高的动作，仅有&nbsp;ε的概率（我设置的是5%）会尝试别的动作。增加训练数或提高训练效率就能更好地覆盖到全部状态。</p>
+<h3>项目2：查看初始状态</h3>
+<p>每个动作的Q值应该都差不多，而且应该呈现出对称性。</p>
+<p><img src="assets/04/06.png" alt="" loading="lazy"></p>
+<p>与预测的不太一致，（0，0）与（2，2）动作后是等价局面，二者Q值应该接近。Q值基本上都是负的，说明10万局游戏中，赢的情况较少。</p>
+<h3>项目3：查看早期状态</h3>
+<p>早期状态应该能显示出某些动作具有相对低的Q值——“走这一步你大概就输了”。</p>
+<p><img src="assets/04/07.png" alt="" loading="lazy"></p>
+<p id="1639056973121">&nbsp;这是一个后手的情况，可以看出，除了走（1，1），其余走法基本必输。奖励为赢方+1，输方-1，因为折扣因子设为1，所以Q值越接近-1，表示输的几率越大。</p>
+<h3>项目4：查看中后期的状态</h3>
+<p>中后期的状态应该能显示出某些动作是必赢 / 必输的。</p>
+<p>“走哪儿都输”：</p>
+<p><img src="assets/04/08.png" alt="" loading="lazy">&nbsp;</p>
+<p id="1639029738186">&nbsp;“走这一步，必赢”：</p>
+<p><img src="assets/04/09.png" alt="" loading="lazy"></p>
+<p id="1639029963275">&nbsp;走（0，2）确实是必赢的，你看出来了吗？</p>
+<h2>小结</h2>
+<p>测试过后，除了初始状态的Q值 不太对劲，其他的局面基本符合认知，但我在翻查Q表格的时候发现，其实很多状态都没有更新，Q表格也没有覆盖所有合法状态。而且，每一轮只更新2个Q值确实是太慢了，10万局游戏花了不少时间。这些问题，就留到下一节解决吧！</p>
+<h2>说一说踩的坑</h2>
+<ul>
+<li>本以为翻转状态可以直接优雅地 state =&nbsp; -1 * state，但转换成字符判定时却遇到了问题，因为numpy.array中的元素居然有负零的存在 0 * -1 = - 0，转换成字符串后 '0' 不等于 '-0'！！解决方法：只更改 1 和 -1。</li>
+<li>深拷贝与浅拷贝的问题，self.agent.lastState_blue = self.env.state，不是直接赋值，而是赋予了 self.env.state 的引用，所以&nbsp;self.agent.lastState_blue 的值是变化的，然后导致一系列的错误。解决方法：self.agent.lastState_blue = self.env.state.copy()。</li>
+<li>有两个边界情况要注意，一是首次动作时没有上一状态；二是动作后若游戏结束，要直接更新Q值。</li>
+</ul>
+
+</main><p class="source">原文作者：埠默笙声声声脉。转载来源：<a href="https://www.cnblogs.com/wsy950409/p/15665291.html">https://www.cnblogs.com/wsy950409/p/15665291.html</a></p>
+<nav class="chapter-nav" aria-label="文章导航"><a class="previous" href="03-原文备份.html">← 上一篇：Q 表框架</a><a class="next" href="05-原文备份.html">下一篇：优化训练 →</a></nav>
+</body></html>

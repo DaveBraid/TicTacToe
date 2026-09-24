@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>游戏时间</title><style>
+body{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,sans-serif;color:#222}
+img{max-width:100%;height:auto} pre{overflow:auto;padding:1rem;background:#f5f5f5} code{overflow-wrap:anywhere}
+table{border-collapse:collapse}td,th{border:1px solid #aaa;padding:.35rem}.source{border-top:1px solid #ccc;margin-top:3rem}
+
+.chapter-nav{display:flex;justify-content:space-between;gap:1rem;margin:2rem 0 1rem}
+.chapter-nav a{display:inline-block;padding:.65rem 1rem;border:1px solid #ccd6e0;border-radius:.5rem;background:#f4f8fc;color:#174a76;text-decoration:none}
+.chapter-nav a:hover,.chapter-nav a:focus-visible{background:#e5f1fb;border-color:#77a8d3}
+.chapter-nav .next{margin-left:auto;text-align:right}
+</style></head><body><h1>游戏时间</h1>
+<p>离线备份于 2026-09-24 · <a href="https://www.cnblogs.com/wsy950409/p/15680697.html">原文地址</a> · <a href="README.md">学习路线</a></p>
+<main>
+<p>在 <a href="05-原文备份.html" target="_blank">强化学习实战 | 表格型Q-Learning玩井字棋（三）优化，优化</a>&nbsp;中，我们经过优化和训练，得到了一个还不错的Q表格，这一节我们将用pygame实现一个有人机对战，机机对战和作弊功能的井字棋游戏。至于胜率统计这个功能，其实没有必要了——因为Q表格AI内战永远是平局。基本的pygame用法可以学习 <a href="https://www.patternsgameprog.com/series/discover-python-and-patterns/" target="_blank" rel="noopener nofollow">Create a game with Pygame and Design Patterns</a> 中的部分章节。总得来说就是逐帧绘制，循环刷新。</p>
+<p>项目地址：<a href="https://gitee.com/wsy950409/q-table-play-tic-tac-toe" target="_blank" rel="noopener nofollow">码云</a>。</p>
+<h2>机机对战</h2>
+<h3>Q表格 vs Q表格</h3>
+<p><img src="assets/06/01.gif" alt="" width="694" height="383" loading="lazy"></p>
+<p id="1639315076756">点开 <strong>CHEAT</strong> 可以查看蓝方在决策时使用的Q表格：&nbsp;</p>
+<p><img src="assets/06/02.gif" alt="" width="693" height="383" loading="lazy"></p>
+<h3 id="1639315236587">&nbsp;Q表格 vs 随机</h3>
+<p><img src="assets/06/03.gif" alt="" width="693" height="383" loading="lazy"></p>
+<h2 id="1639315501571">&nbsp;人机对战</h2>
+<p><img src="assets/06/04.gif" alt="" width="694" height="384" loading="lazy"></p>
+<p id="1639315696738">&nbsp;</p>
+<p>&nbsp;</p>
+
+</main><p class="source">原文作者：埠默笙声声声脉。转载来源：<a href="https://www.cnblogs.com/wsy950409/p/15680697.html">https://www.cnblogs.com/wsy950409/p/15680697.html</a></p>
+<nav class="chapter-nav" aria-label="文章导航"><a class="previous" href="05-原文备份.html">← 上一篇：优化训练</a><a class="next" href="README.md">返回学习目录 →</a></nav>
+</body></html>

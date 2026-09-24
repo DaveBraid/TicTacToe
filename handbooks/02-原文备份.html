@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>井字棋环境</title><style>
+body{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,sans-serif;color:#222}
+img{max-width:100%;height:auto} pre{overflow:auto;padding:1rem;background:#f5f5f5} code{overflow-wrap:anywhere}
+table{border-collapse:collapse}td,th{border:1px solid #aaa;padding:.35rem}.source{border-top:1px solid #ccc;margin-top:3rem}
+
+.chapter-nav{display:flex;justify-content:space-between;gap:1rem;margin:2rem 0 1rem}
+.chapter-nav a{display:inline-block;padding:.65rem 1rem;border:1px solid #ccd6e0;border-radius:.5rem;background:#f4f8fc;color:#174a76;text-decoration:none}
+.chapter-nav a:hover,.chapter-nav a:focus-visible{background:#e5f1fb;border-color:#77a8d3}
+.chapter-nav .next{margin-left:auto;text-align:right}
+</style></head><body><h1>井字棋环境</h1>
+<p>离线备份于 2026-09-24 · <a href="https://www.cnblogs.com/wsy950409/p/15647914.html">原文地址</a> · <a href="README.md">学习路线</a></p>
+<main>
+<p>在文章 <a href="01-原文备份.html" target="_blank">强化学习实战 | 自定义Gym环境</a> 中 ，我们了解了一个简单的环境应该如何定义，并使用 print 简单地呈现了环境。在本文中，我们将学习自定义一个稍微复杂一点的环境——井字棋。回想一下井字棋游戏：</p>
+<ul>
+<li>这是一个双人回合制博弈游戏，双方玩家使用的占位符是不一样的（圈/叉），动作编写需要区分玩家</li>
+<li>双方玩家获得的终局奖励是不一样的，胜方+1，败方-1（除非平局+0），奖励编写需要区分玩家</li>
+<li>终局的条件是：任意行 / 列 / 对角 占满了相同的占位符 <strong>or </strong>场上没有空位可以占位</li>
+<li>从单个agent的视角看，当前状态 s 下采取动作 a 后，新的状态 s_ 并不是后继状态，而是一个等待对手动作的中间状态，真正的后继状态是对手动作之后产生的状态 <strong>s'</strong>（除非采取动作 a 后游戏直接结束）。正如Sliver在课上回答同学关于多智能体应该如何处理时说的：“把其他agent也当作环境的一部分”，如下图所示：</li>
+<li><img src="assets/02/01.png" alt="" width="379" height="401" loading="lazy" style="display: block; margin-left: auto; margin-right: auto">
+<p id="1638719803837">&nbsp;</p>
+</li>
+</ul>
+<p>除了游戏本身的机制，考虑到与gym的API接口格式的契合，通过外部循环控制游戏进程是较方便的，所以env本身定义时不必要编写控制游戏进程 / 切换行动玩家的代码。另外，我们还需要更生动的环境呈现方式，而不是print！那么，接下来我们就来实现上述的目标吧！</p>
+<h2>步骤1：新建文件</h2>
+<p>来到目录：D:\Anaconda\envs\pytorch1.1\Lib\site-packages\gym\envs\user，创建文件 __init__.py 和 TicTacToe_env.py（还记得吗？文件夹user是文章&nbsp;<a href="01-原文备份.html" target="_blank">强化学习实战 | 自定义Gym环境</a>&nbsp;中我们创建的用来存放自定义环境的文件夹）。</p>
+<h2>步骤2：编写 TicTacToe_env.py 和 __init__.py</h2>
+<p>gym内置了一个绘图工具rendering，不过功能并不周全，想要绘制复杂的东西非常麻烦。本文不打算深入研究，只借助rendering中基本的线条 / 方块 / 圆圈呈现环境（更生动的游戏表现我们完全可以通过pygame来实现）。rendering是单帧绘制的，当调用env.render()时，将呈现当前 self.viewer.geoms 中所记录的绘画元素。环境的基本要素设计如下：</p>
+<ul>
+<li>状态：由二维的numpy.array表示，无占位符值为0，有蓝色占位符值为1，有红色占位符值为-1。</li>
+<li>动作：设计为一个字典，有着格式：action = {'mark':'blue', 'pos':(x, y)}，其中'mark'表示占位符的颜色，用以区分玩家，'pos'表示占位符的位置。</li>
+<li>奖励：锁定蓝方视角，胜利+1，失败-1，平局+0。</li>
+</ul>
+<p>TicTacToe_env.py 的整体代码如下：</p>
+<div class="cnblogs_code">
+<pre><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> gym
+</span><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> random
+</span><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> time
+</span><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> numpy as np
+</span><span style="color: rgba(0, 0, 255, 1)">from</span> gym.envs.classic_control <span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> rendering
+
+</span><span style="color: rgba(0, 0, 255, 1)">class</span><span style="color: rgba(0, 0, 0, 1)"> TicTacToeEnv(gym.Env):
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> <span style="color: rgba(128, 0, 128, 1)">__init__</span><span style="color: rgba(0, 0, 0, 1)">(self):
+        self.state </span>= np.zeros([3, 3<span style="color: rgba(0, 0, 0, 1)">])
+        self.winner </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+        WIDTH, HEIGHT </span>= 300, 300<span style="color: rgba(0, 0, 0, 1)"> 
+        self.viewer </span>=<span style="color: rgba(0, 0, 0, 1)"> rendering.Viewer(WIDTH, HEIGHT)
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span><span style="color: rgba(0, 0, 0, 1)"> reset(self):
+        self.state </span>= np.zeros([3, 3<span style="color: rgba(0, 0, 0, 1)">])
+        self.winner </span>=<span style="color: rgba(0, 0, 0, 1)"> None
+        self.viewer.geoms.clear() </span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 清空画板中需要绘制的元素</span>
+<span style="color: rgba(0, 0, 0, 1)">        self.viewer.onetime_geoms.clear()
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span><span style="color: rgba(0, 0, 0, 1)"> step(self, action):
+        </span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 动作的格式：action = {'mark':'circle'/'cross', 'pos':(x,y)}</span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 产生状态</span>
+        x = action[<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">pos</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">][0]
+        y </span>= action[<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">pos</span><span style="color: rgba(128, 0, 0, 1)">'</span>][1<span style="color: rgba(0, 0, 0, 1)">]
+        </span><span style="color: rgba(0, 0, 255, 1)">if</span> action[<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">mark</span><span style="color: rgba(128, 0, 0, 1)">'</span>] == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:  
+            self.state[x][y] </span>= 1
+        <span style="color: rgba(0, 0, 255, 1)">elif</span> action[<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">mark</span><span style="color: rgba(128, 0, 0, 1)">'</span>] == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">: 
+            self.state[x][y] </span>= -1
+        <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 奖励</span>
+        done =<span style="color: rgba(0, 0, 0, 1)"> self.judgeEnd() 
+        </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> done:
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span> self.winner == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">: 
+                reward </span>= 1 
+            <span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)">:
+                reward </span>= -1
+        <span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)">: reward </span>=<span style="color: rgba(0, 0, 0, 1)"> 0
+        </span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 报告</span>
+        info =<span style="color: rgba(0, 0, 0, 1)"> {}
+        </span><span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> self.state, reward, done, info
+      
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span><span style="color: rgba(0, 0, 0, 1)"> judgeEnd(self):
+        </span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 检查两对角</span>
+        check_diag_1 = self.state[0][0] + self.state[1][1] + self.state[2][2<span style="color: rgba(0, 0, 0, 1)">]
+        check_diag_2 </span>= self.state[2][0] + self.state[1][1] + self.state[0][2<span style="color: rgba(0, 0, 0, 1)">]
+        </span><span style="color: rgba(0, 0, 255, 1)">if</span> check_diag_1 == 3 <span style="color: rgba(0, 0, 255, 1)">or</span> check_diag_2 == 3<span style="color: rgba(0, 0, 0, 1)">:
+            self.winner </span>= <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+            <span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> True
+        </span><span style="color: rgba(0, 0, 255, 1)">elif</span> check_diag_1 == -3 <span style="color: rgba(0, 0, 255, 1)">or</span> check_diag_2 == -3<span style="color: rgba(0, 0, 0, 1)">:
+            self.winner </span>= <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+            <span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> True
+        </span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 检查三行三列</span>
+        state_T =<span style="color: rgba(0, 0, 0, 1)"> self.state.T
+        </span><span style="color: rgba(0, 0, 255, 1)">for</span> i <span style="color: rgba(0, 0, 255, 1)">in</span> range(3<span style="color: rgba(0, 0, 0, 1)">):
+            check_row </span>= sum(self.state[i]) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 检查行</span>
+            check_col = sum(state_T[i]) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 检查列</span>
+            <span style="color: rgba(0, 0, 255, 1)">if</span> check_row == 3 <span style="color: rgba(0, 0, 255, 1)">or</span> check_col == 3<span style="color: rgba(0, 0, 0, 1)">:
+                self.winner </span>= <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+                <span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> True
+            </span><span style="color: rgba(0, 0, 255, 1)">elif</span> check_row == -3 <span style="color: rgba(0, 0, 255, 1)">or</span> check_col == -3<span style="color: rgba(0, 0, 0, 1)">:
+                self.winner </span>= <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+                <span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> True
+        </span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 检查整个棋盘是否还有空位</span>
+        empty =<span style="color: rgba(0, 0, 0, 1)"> []
+        </span><span style="color: rgba(0, 0, 255, 1)">for</span> i <span style="color: rgba(0, 0, 255, 1)">in</span> range(3<span style="color: rgba(0, 0, 0, 1)">):
+            </span><span style="color: rgba(0, 0, 255, 1)">for</span> j <span style="color: rgba(0, 0, 255, 1)">in</span> range(3<span style="color: rgba(0, 0, 0, 1)">):
+                </span><span style="color: rgba(0, 0, 255, 1)">if</span> self.state[i][j] ==<span style="color: rgba(0, 0, 0, 1)"> 0: empty.append((i,j))
+        </span><span style="color: rgba(0, 0, 255, 1)">if</span> empty ==<span style="color: rgba(0, 0, 0, 1)"> []: </span><span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> True
+        
+        </span><span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> False
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> render(self, mode=<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">human</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">):
+        SIZE </span>= 100
+        <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 画分隔线</span>
+        line1 = rendering.Line((0, 100), (300, 100<span style="color: rgba(0, 0, 0, 1)">))
+        line2 </span>= rendering.Line((0, 200), (300, 200<span style="color: rgba(0, 0, 0, 1)">))
+        line3 </span>= rendering.Line((100, 0), (100, 300<span style="color: rgba(0, 0, 0, 1)">))
+        line4 </span>= rendering.Line((200, 0), (200, 300<span style="color: rgba(0, 0, 0, 1)">))
+        line1.set_color(0, 0, 0)
+        line2.set_color(0, 0, 0)
+        line3.set_color(0, 0, 0)
+        line4.set_color(0, 0, 0)
+        </span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 将绘画元素添加至画板中</span>
+<span style="color: rgba(0, 0, 0, 1)">        self.viewer.add_geom(line1)
+        self.viewer.add_geom(line2)
+        self.viewer.add_geom(line3)
+        self.viewer.add_geom(line4)
+        </span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 根据self.state画占位符</span>
+        <span style="color: rgba(0, 0, 255, 1)">for</span> i <span style="color: rgba(0, 0, 255, 1)">in</span> range(3<span style="color: rgba(0, 0, 0, 1)">):
+            </span><span style="color: rgba(0, 0, 255, 1)">for</span> j <span style="color: rgba(0, 0, 255, 1)">in</span> range(3<span style="color: rgba(0, 0, 0, 1)">):
+                </span><span style="color: rgba(0, 0, 255, 1)">if</span> self.state[i][j] == 1<span style="color: rgba(0, 0, 0, 1)">:
+                    circle </span>= rendering.make_circle(30) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 画直径为30的圆</span>
+                    circle.set_color(135/255, 206/255, 250/255) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> mark = blue</span>
+                    move = rendering.Transform(translation=(i * SIZE + 50, j * SIZE + 50)) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 创建平移操作</span>
+                    circle.add_attr(move) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 将平移操作添加至圆的属性中</span>
+                    self.viewer.add_geom(circle) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 将圆添加至画板中</span>
+                <span style="color: rgba(0, 0, 255, 1)">if</span> self.state[i][j] == -1<span style="color: rgba(0, 0, 0, 1)">:
+                    circle </span>= rendering.make_circle(30<span style="color: rgba(0, 0, 0, 1)">)
+                    circle.set_color(</span>255/255, 182/255, 193/255) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> mark = red</span>
+                    move = rendering.Transform(translation=(i * SIZE + 50, j * SIZE + 50<span style="color: rgba(0, 0, 0, 1)">))
+                    circle.add_attr(move)
+                    self.viewer.add_geom(circle)
+            
+        </span><span style="color: rgba(0, 0, 255, 1)">return</span> self.viewer.render(return_rgb_array=mode == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">rgb_array</span><span style="color: rgba(128, 0, 0, 1)">'</span>)</pre>
+</div>
+<p>在 __init__.py 中引入类的信息，添加：</p>
+<div class="cnblogs_code">
+<pre><span style="color: rgba(0, 0, 255, 1)">from</span> gym.envs.user.TicTacToe_env <span style="color: rgba(0, 0, 255, 1)">import</span> TicTacToeEnv</pre>
+</div>
+<h2>步骤3：注册环境</h2>
+<p>来到目录：D:\Anaconda\envs\pytorch1.1\Lib\site-packages\gym，打开 __init__.py，添加代码：</p>
+<div class="cnblogs_code">
+<pre><span style="color: rgba(0, 0, 0, 1)">register(
+    id</span>=<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">TicTacToeEnv-v0</span><span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(0, 0, 0, 1)">,
+    entry_point</span>=<span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(128, 0, 0, 1)">gym.envs.user:TicTacToeEnv</span><span style="color: rgba(128, 0, 0, 1)">"</span><span style="color: rgba(0, 0, 0, 1)">,
+    max_episode_steps</span>=20<span style="color: rgba(0, 0, 0, 1)">,    
+)</span></pre>
+</div>
+<h2>步骤4：测试环境</h2>
+<p>在测试代码中，我们在主循环中让游戏不断地进行。蓝红双方玩家以0.5s的间隔，随机选择空格子动作，代码如下：</p>
+<div class="cnblogs_code">
+<pre><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> gym
+</span><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> random
+</span><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> time
+
+</span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 查看所有已注册的环境</span><span style="color: rgba(0, 128, 0, 1)">
+#</span><span style="color: rgba(0, 128, 0, 1)"> from gym import envs</span><span style="color: rgba(0, 128, 0, 1)">
+#</span><span style="color: rgba(0, 128, 0, 1)"> print(envs.registry.all()) </span>
+
+<span style="color: rgba(0, 0, 255, 1)">def</span> randomAction(env_, mark): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 随机选择未占位的格子动作</span>
+    action_space =<span style="color: rgba(0, 0, 0, 1)"> []
+    </span><span style="color: rgba(0, 0, 255, 1)">for</span> i, row <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> enumerate(env_.state):
+        </span><span style="color: rgba(0, 0, 255, 1)">for</span> j, one <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> enumerate(row):
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span> one ==<span style="color: rgba(0, 0, 0, 1)"> 0: action_space.append((i,j))  
+    action_pos </span>=<span style="color: rgba(0, 0, 0, 1)"> random.choice(action_space)
+    action </span>= {<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">mark</span><span style="color: rgba(128, 0, 0, 1)">'</span>:mark, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">pos</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:action_pos}
+    </span><span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> action
+
+</span><span style="color: rgba(0, 0, 255, 1)">def</span><span style="color: rgba(0, 0, 0, 1)"> randomFirst():
+    </span><span style="color: rgba(0, 0, 255, 1)">if</span> random.random() &gt; 0.5: <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 随机先后手</span>
+        first_, second_ = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+    <span style="color: rgba(0, 0, 255, 1)">else</span><span style="color: rgba(0, 0, 0, 1)">: 
+        first_, second_ </span>= <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span>, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+    <span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> first_, second_
+
+env </span>= gym.make(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">TicTacToeEnv-v0</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">)
+env.reset() </span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 在第一次step前要先重置环境 不然会报错</span>
+first, second =<span style="color: rgba(0, 0, 0, 1)"> randomFirst()
+</span><span style="color: rgba(0, 0, 255, 1)">while</span><span style="color: rgba(0, 0, 0, 1)"> True:
+    </span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 先手行动</span>
+    action =<span style="color: rgba(0, 0, 0, 1)"> randomAction(env, first)
+    state, reward, done, info </span>=<span style="color: rgba(0, 0, 0, 1)"> env.step(action)
+    env.render()
+    time.sleep(</span>0.5<span style="color: rgba(0, 0, 0, 1)">)
+    </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> done: 
+        env.reset()
+        env.render()
+        first, second </span>=<span style="color: rgba(0, 0, 0, 1)"> randomFirst()
+        time.sleep(</span>0.5<span style="color: rgba(0, 0, 0, 1)">)
+        </span><span style="color: rgba(0, 0, 255, 1)">continue</span>
+    <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 后手行动</span>
+    action =<span style="color: rgba(0, 0, 0, 1)"> randomAction(env, second)
+    state, reward, done, info </span>=<span style="color: rgba(0, 0, 0, 1)"> env.step(action)
+    env.render()
+    time.sleep(</span>0.5<span style="color: rgba(0, 0, 0, 1)">)
+    </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> done: 
+        env.reset()
+        env.render()
+        first, second </span>=<span style="color: rgba(0, 0, 0, 1)"> randomFirst()
+        time.sleep(</span>0.5<span style="color: rgba(0, 0, 0, 1)">)
+        </span><span style="color: rgba(0, 0, 255, 1)">continue</span></pre>
+</div>
+<p>效果如下图所示：</p>
+<p><img src="assets/02/02.gif" alt="" loading="lazy" style="display: block; margin-left: auto; margin-right: auto"></p>
+<p>&nbsp;</p>
+<p>后文：<a href="03-原文备份.html" target="_blank">强化学习实战 | 表格型Q-Learning玩井字棋（一）搭个框架</a></p>
+<p id="1638725408931">&nbsp;</p>
+<p>&nbsp;</p>
+
+</main><p class="source">原文作者：埠默笙声声声脉。转载来源：<a href="https://www.cnblogs.com/wsy950409/p/15647914.html">https://www.cnblogs.com/wsy950409/p/15647914.html</a></p>
+<nav class="chapter-nav" aria-label="文章导航"><a class="previous" href="01-原文备份.html">← 上一篇：自定义 Gym 环境</a><a class="next" href="03-原文备份.html">下一篇：Q 表框架 →</a></nav>
+</body></html>

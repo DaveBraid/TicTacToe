@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q 表框架</title><style>
+body{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.7 system-ui,sans-serif;color:#222}
+img{max-width:100%;height:auto} pre{overflow:auto;padding:1rem;background:#f5f5f5} code{overflow-wrap:anywhere}
+table{border-collapse:collapse}td,th{border:1px solid #aaa;padding:.35rem}.source{border-top:1px solid #ccc;margin-top:3rem}
+
+.chapter-nav{display:flex;justify-content:space-between;gap:1rem;margin:2rem 0 1rem}
+.chapter-nav a{display:inline-block;padding:.65rem 1rem;border:1px solid #ccd6e0;border-radius:.5rem;background:#f4f8fc;color:#174a76;text-decoration:none}
+.chapter-nav a:hover,.chapter-nav a:focus-visible{background:#e5f1fb;border-color:#77a8d3}
+.chapter-nav .next{margin-left:auto;text-align:right}
+</style></head><body><h1>Q 表框架</h1>
+<p>离线备份于 2026-09-24 · <a href="https://www.cnblogs.com/wsy950409/p/15658371.html">原文地址</a> · <a href="README.md">学习路线</a></p>
+<main>
+<p>在 <a href="02-原文备份.html" target="_blank">强化学习实战 | 自定义Gym环境之井子棋</a> 中，我们构建了一个井字棋环境，并进行了测试。接下来我们可以使用各种强化学习方法训练agent出棋，其中比较简单的是Q学习，Q即Q(S, a)，是<strong>状态动作价值</strong>，表示在状态s下执行动作a的未来收益的总和。Q学习的算法如下：</p>
+<p><img src="assets/03/01.png" alt="" width="717" height="212" loading="lazy" style="display: block; margin-left: auto; margin-right: auto"></p>
+<p>可以看到，当agent在状态S，执行了动作a之后，得到了环境给予的奖励R，并进入状态S'。同时，选择最大的Q(S', a)，更新Q(S, a)。所谓表格型Q学习，就是构建一个Q(S, a)的表格，维护所有的状态动作价值。&nbsp;一个很好的示例来自 <a href="https://enhuiz.github.io/flappybird-ql/" target="_blank" rel="noopener nofollow">Q-Learning玩Flappy Bird</a>，随着游戏的不断进行，Q表格中记录的状态越来越多，状态动作价值也越来越准确，于是小鸟也飞得越来越好。</p>
+<p>我们也要构建这样的Q表格，并希望通过Q_table[state][action] 的检索方式访问其储存的状态动作价值，我们可以用字典实现：&nbsp;</p>
+<table border="0" align="center">
+<tbody>
+<tr>
+<td style="text-align: center">'[1, 0, -1, 0, 0, 0, 1, -1, 0]'</td>
+<td>{'(0,1)':0, '(1,0)':0, '(1,1)':0, '(1,2)':0,&nbsp;'(2,2)':0}</td>
+</tr>
+<tr>
+<td>'[0, 1, 0, -1, 0, 0, -1, 0, 1]'</td>
+<td style="text-align: center">......</td>
+</tr>
+</tbody>
+</table>
+<p>在本文中我们要达到如下的目标：</p>
+<ul>
+<li>改写&nbsp;<a href="02-原文备份.html" target="_blank">强化学习实战 | 自定义Gym环境之井子棋</a>&nbsp;中的测试代码，要更有逻辑，更能凸显强化学习中 agent 和环境的概念。</li>
+<li>agent 随机选择空格进行动作，每次动作前，更新Q表格：若表格中不存在当前状态，则将当前状态及其动作价值添加至Q表格中。</li>
+<li>玩50000次游戏，查看Q表格中的状态数</li>
+</ul>
+<h2>步骤1：创建文件</h2>
+<p>在任意目录新建文件 Table QLearning play TicTacToe.py</p>
+<h2>步骤2：创建类 Agent()</h2>
+<p>Agent() 类 需要有（1）随机落子的动作生成函数（2）Q表格（3）更新Q表格的函数，且新增表格中全部状态动作价值设为0。代码如下：</p>
+<div class="cnblogs_code">
+<pre><span style="color: rgba(0, 0, 255, 1)">class</span><span style="color: rgba(0, 0, 0, 1)"> Agent():
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> <span style="color: rgba(128, 0, 128, 1)">__init__</span><span style="color: rgba(0, 0, 0, 1)">(self):
+        self.Q_table </span>=<span style="color: rgba(0, 0, 0, 1)"> {}
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> getEmptyPos(self, env_): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 返回空位的坐标</span>
+        action_space =<span style="color: rgba(0, 0, 0, 1)"> []
+        </span><span style="color: rgba(0, 0, 255, 1)">for</span> i, row <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> enumerate(env_.state):
+            </span><span style="color: rgba(0, 0, 255, 1)">for</span> j, one <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> enumerate(row):
+                </span><span style="color: rgba(0, 0, 255, 1)">if</span> one ==<span style="color: rgba(0, 0, 0, 1)"> 0: action_space.append((i,j)) 
+        </span><span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> action_space
+        
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> randomAction(self, env_, mark): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 随机选择空格动作</span>
+        actions =<span style="color: rgba(0, 0, 0, 1)"> self.getEmptyPos(env_)
+        action_pos </span>=<span style="color: rgba(0, 0, 0, 1)"> random.choice(actions)
+        action </span>= {<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">mark</span><span style="color: rgba(128, 0, 0, 1)">'</span>:mark, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">pos</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:action_pos}
+        </span><span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> action
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> updateQtable(self, env_): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 更新Q表格</span>
+        state =<span style="color: rgba(0, 0, 0, 1)"> env_.state
+        </span><span style="color: rgba(0, 0, 255, 1)">if</span> str(state) <span style="color: rgba(0, 0, 255, 1)">not</span> <span style="color: rgba(0, 0, 255, 1)">in</span> self.Q_table: <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 新增状态</span>
+            self.Q_table[str(state)] =<span style="color: rgba(0, 0, 0, 1)"> {}
+            actions </span>=<span style="color: rgba(0, 0, 0, 1)"> self.getEmptyPos(env_)
+            </span><span style="color: rgba(0, 0, 255, 1)">for</span> action <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> actions:
+                self.Q_table[str(state)][str(action)] </span>= 0 <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 新增的状态动作价值为0</span></pre>
+</div>
+<h2>步骤3：创建类 Game()</h2>
+<p>Game() 类需要有（1）是/否显示游戏过程、更改行动时间间隔的属性（2）开局随机先后手（3）切换行动方的函数（4）游戏结束时，可以新建游戏。代码如下：</p>
+<div class="cnblogs_code">
+<pre><span style="color: rgba(0, 0, 255, 1)">class</span><span style="color: rgba(0, 0, 0, 1)"> Game():
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> <span style="color: rgba(128, 0, 128, 1)">__init__</span><span style="color: rgba(0, 0, 0, 1)">(self, env):
+        self.INTERVAL </span>= 0 <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 行动间隔</span>
+        self.RENDER = False <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 是否显示游戏过程</span>
+        self.first = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">if</span> random.random() &gt; 0.5 <span style="color: rgba(0, 0, 255, 1)">else</span> <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 随机先后手</span>
+        self.currentMove = self.first <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 当前行动方</span>
+        self.env =<span style="color: rgba(0, 0, 0, 1)"> env
+        self.agent </span>=<span style="color: rgba(0, 0, 0, 1)"> Agent()
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> switchMove(self): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 切换行动玩家</span>
+        move =<span style="color: rgba(0, 0, 0, 1)"> self.currentMove
+        </span><span style="color: rgba(0, 0, 255, 1)">if</span> move == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>: self.currentMove = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+        <span style="color: rgba(0, 0, 255, 1)">elif</span> move == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span>: self.currentMove = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+    
+    <span style="color: rgba(0, 0, 255, 1)">def</span> newGame(self): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 新建游戏</span>
+        self.first = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">if</span> random.random() &gt; 0.5 <span style="color: rgba(0, 0, 255, 1)">else</span> <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">
+        self.currentMove </span>=<span style="color: rgba(0, 0, 0, 1)"> self.first
+        self.env.reset()
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> run(self): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 玩一局游戏</span>
+        self.env.reset() <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 在第一次step前要先重置环境 不然会报错</span>
+        <span style="color: rgba(0, 0, 255, 1)">while</span><span style="color: rgba(0, 0, 0, 1)"> True:
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span> self.currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>: self.agent.updateQtable(self.env) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 只记录蓝方视角下的局面</span>
+            action =<span style="color: rgba(0, 0, 0, 1)"> self.agent.randomAction(self.env, self.currentMove)
+            state, reward, done, info </span>=<span style="color: rgba(0, 0, 0, 1)"> self.env.step(action)
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> self.RENDER: self.env.render()
+            self.switchMove()
+            time.sleep(self.INTERVAL)
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> done:
+                self.newGame()
+                </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> self.RENDER: self.env.render()
+                time.sleep(self.INTERVAL)
+                </span><span style="color: rgba(0, 0, 255, 1)">break</span></pre>
+</div>
+<h2>步骤4：测试</h2>
+<p>（1）玩一局游戏，显示Q表格，及Q表格中储存的状态数：</p>
+<div class="cnblogs_code">
+<pre>env = gym.make(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">TicTacToeEnv-v0</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">)
+game </span>=<span style="color: rgba(0, 0, 0, 1)"> Game(env)
+</span><span style="color: rgba(0, 0, 255, 1)">for</span> i <span style="color: rgba(0, 0, 255, 1)">in</span> range(1<span style="color: rgba(0, 0, 0, 1)">):
+    game.run()
+
+</span><span style="color: rgba(0, 0, 255, 1)">for</span> state <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> game.agent.Q_table:
+    </span><span style="color: rgba(0, 0, 255, 1)">print</span><span style="color: rgba(0, 0, 0, 1)">(state)
+    </span><span style="color: rgba(0, 0, 255, 1)">for</span> action <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> game.agent.Q_table[state]:
+        </span><span style="color: rgba(0, 0, 255, 1)">print</span>(action, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">: </span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">, game.agent.Q_table[state][action])
+    </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">--------------</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">)
+
+</span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">dim of state: </span><span style="color: rgba(128, 0, 0, 1)">'</span>, len(game.agent.Q_table))</pre>
+</div>
+<p>输出：</p>
+<p><img src="assets/03/02.png" alt="" loading="lazy"></p>
+<p id="1638877565533">（2） 玩50000局游戏，查看Q表格中储存的状态数：</p>
+<div class="cnblogs_code">
+<pre>env = gym.make(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">TicTacToeEnv-v0</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">)
+game </span>=<span style="color: rgba(0, 0, 0, 1)"> Game(env)
+</span><span style="color: rgba(0, 0, 255, 1)">for</span> i <span style="color: rgba(0, 0, 255, 1)">in</span> range(50000<span style="color: rgba(0, 0, 0, 1)">):
+    game.run()
+
+</span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">dim of state: </span><span style="color: rgba(128, 0, 0, 1)">'</span>, len(game.agent.Q_table))</pre>
+</div>
+<p>输出：</p>
+<p><img src="assets/03/03.png" alt="" loading="lazy"></p>
+<p>在论文中，我找到了井字棋的状态数：</p>
+<p><img src="assets/03/04.png" alt="" width="695" height="343" loading="lazy" style="display: block; margin-left: auto; margin-right: auto; float: left"></p>
+<p id="1638974486928">&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>因为Q表中录入的状态全部是非终止状态，正好有：<strong>4520 = 5478 - 958</strong>，这说明算法没有问题。</p>
+<p>整体代码如下：</p>
+<div class="cnblogs_code"><img src="assets/03/05.gif" id="code_img_closed_377eb0a6-bd77-44b0-9c58-87dbaf444e04" class="code_img_closed"><img src="assets/03/06.gif" id="code_img_opened_377eb0a6-bd77-44b0-9c58-87dbaf444e04" class="code_img_opened" style="display: none">
+<div id="cnblogs_code_open_377eb0a6-bd77-44b0-9c58-87dbaf444e04" class="cnblogs_code_hide">
+<pre><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> gym
+</span><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> random
+</span><span style="color: rgba(0, 0, 255, 1)">import</span><span style="color: rgba(0, 0, 0, 1)"> time
+
+</span><span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 查看所有已注册的环境</span><span style="color: rgba(0, 128, 0, 1)">
+#</span><span style="color: rgba(0, 128, 0, 1)"> from gym import envs</span><span style="color: rgba(0, 128, 0, 1)">
+#</span><span style="color: rgba(0, 128, 0, 1)"> print(envs.registry.all()) </span>
+
+<span style="color: rgba(0, 0, 255, 1)">class</span><span style="color: rgba(0, 0, 0, 1)"> Game():
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> <span style="color: rgba(128, 0, 128, 1)">__init__</span><span style="color: rgba(0, 0, 0, 1)">(self, env):
+        self.INTERVAL </span>= 0 <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 行动间隔</span>
+        self.RENDER = False <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 是否显示游戏过程</span>
+        self.first = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">if</span> random.random() &gt; 0.5 <span style="color: rgba(0, 0, 255, 1)">else</span> <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 随机先后手</span>
+        self.currentMove =<span style="color: rgba(0, 0, 0, 1)"> self.first
+        self.env </span>=<span style="color: rgba(0, 0, 0, 1)"> env
+        self.agent </span>=<span style="color: rgba(0, 0, 0, 1)"> Agent()
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> switchMove(self): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 切换行动玩家</span>
+        move =<span style="color: rgba(0, 0, 0, 1)"> self.currentMove
+        </span><span style="color: rgba(0, 0, 255, 1)">if</span> move == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>: self.currentMove = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+        <span style="color: rgba(0, 0, 255, 1)">elif</span> move == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span>: self.currentMove = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>
+    
+    <span style="color: rgba(0, 0, 255, 1)">def</span> newGame(self): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 新建游戏</span>
+        self.first = <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span> <span style="color: rgba(0, 0, 255, 1)">if</span> random.random() &gt; 0.5 <span style="color: rgba(0, 0, 255, 1)">else</span> <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">red</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">
+        self.currentMove </span>=<span style="color: rgba(0, 0, 0, 1)"> self.first
+        self.env.reset()
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> run(self): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 玩一局游戏</span>
+        self.env.reset() <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 在第一次step前要先重置环境 不然会报错</span>
+        <span style="color: rgba(0, 0, 255, 1)">while</span><span style="color: rgba(0, 0, 0, 1)"> True:
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span> self.currentMove == <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">blue</span><span style="color: rgba(128, 0, 0, 1)">'</span>: self.agent.updateQtable(self.env) <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 只记录蓝方视角下的局面</span>
+            action =<span style="color: rgba(0, 0, 0, 1)"> self.agent.randomAction(self.env, self.currentMove)
+            state, reward, done, info </span>=<span style="color: rgba(0, 0, 0, 1)"> self.env.step(action)
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> self.RENDER: self.env.render()
+            self.switchMove()
+            time.sleep(self.INTERVAL)
+            </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> done:
+                self.newGame()
+                </span><span style="color: rgba(0, 0, 255, 1)">if</span><span style="color: rgba(0, 0, 0, 1)"> self.RENDER: self.env.render()
+                time.sleep(self.INTERVAL)
+                </span><span style="color: rgba(0, 0, 255, 1)">break</span>
+                    
+<span style="color: rgba(0, 0, 255, 1)">class</span><span style="color: rgba(0, 0, 0, 1)"> Agent():
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> <span style="color: rgba(128, 0, 128, 1)">__init__</span><span style="color: rgba(0, 0, 0, 1)">(self):
+        self.Q_table </span>=<span style="color: rgba(0, 0, 0, 1)"> {}
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> getEmptyPos(self, env_): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 返回空位的坐标</span>
+        action_space =<span style="color: rgba(0, 0, 0, 1)"> []
+        </span><span style="color: rgba(0, 0, 255, 1)">for</span> i, row <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> enumerate(env_.state):
+            </span><span style="color: rgba(0, 0, 255, 1)">for</span> j, one <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> enumerate(row):
+                </span><span style="color: rgba(0, 0, 255, 1)">if</span> one ==<span style="color: rgba(0, 0, 0, 1)"> 0: action_space.append((i,j)) 
+        </span><span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> action_space
+        
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span> randomAction(self, env_, mark): <span style="color: rgba(0, 128, 0, 1)">#</span><span style="color: rgba(0, 128, 0, 1)"> 随机选择空格动作</span>
+        actions =<span style="color: rgba(0, 0, 0, 1)"> self.getEmptyPos(env_)
+        action_pos </span>=<span style="color: rgba(0, 0, 0, 1)"> random.choice(actions)
+        action </span>= {<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">mark</span><span style="color: rgba(128, 0, 0, 1)">'</span>:mark, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">pos</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">:action_pos}
+        </span><span style="color: rgba(0, 0, 255, 1)">return</span><span style="color: rgba(0, 0, 0, 1)"> action
+    
+    </span><span style="color: rgba(0, 0, 255, 1)">def</span><span style="color: rgba(0, 0, 0, 1)"> updateQtable(self, env_):
+        state </span>=<span style="color: rgba(0, 0, 0, 1)"> env_.state
+        </span><span style="color: rgba(0, 0, 255, 1)">if</span> str(state) <span style="color: rgba(0, 0, 255, 1)">not</span> <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> self.Q_table:
+            self.Q_table[str(state)] </span>=<span style="color: rgba(0, 0, 0, 1)"> {}
+            actions </span>=<span style="color: rgba(0, 0, 0, 1)"> self.getEmptyPos(env_)
+            </span><span style="color: rgba(0, 0, 255, 1)">for</span> action <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> actions:
+                self.Q_table[str(state)][str(action)] </span>=<span style="color: rgba(0, 0, 0, 1)"> 0
+            
+
+env </span>= gym.make(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">TicTacToeEnv-v0</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">)
+game </span>=<span style="color: rgba(0, 0, 0, 1)"> Game(env)
+</span><span style="color: rgba(0, 0, 255, 1)">for</span> i <span style="color: rgba(0, 0, 255, 1)">in</span> range(1<span style="color: rgba(0, 0, 0, 1)">):
+    game.run()
+
+</span><span style="color: rgba(0, 0, 255, 1)">for</span> state <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> game.agent.Q_table:
+    </span><span style="color: rgba(0, 0, 255, 1)">print</span><span style="color: rgba(0, 0, 0, 1)">(state)
+    </span><span style="color: rgba(0, 0, 255, 1)">for</span> action <span style="color: rgba(0, 0, 255, 1)">in</span><span style="color: rgba(0, 0, 0, 1)"> game.agent.Q_table[state]:
+        </span><span style="color: rgba(0, 0, 255, 1)">print</span>(action, <span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">: </span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">, game.agent.Q_table[state][action])
+    </span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">--------------</span><span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(0, 0, 0, 1)">)
+
+</span><span style="color: rgba(0, 0, 255, 1)">print</span>(<span style="color: rgba(128, 0, 0, 1)">'</span><span style="color: rgba(128, 0, 0, 1)">dim of state: </span><span style="color: rgba(128, 0, 0, 1)">'</span>, len(game.agent.Q_table))</pre>
+</div>
+<span class="cnblogs_code_collapse">View Code</span></div>
+<p>&nbsp;后文：<a href="04-原文备份.html" target="_blank">强化学习实战 | 表格型Q-Learning玩井字棋（二）开始训练！</a></p>
+
+</main><p class="source">原文作者：埠默笙声声声脉。转载来源：<a href="https://www.cnblogs.com/wsy950409/p/15658371.html">https://www.cnblogs.com/wsy950409/p/15658371.html</a></p>
+<nav class="chapter-nav" aria-label="文章导航"><a class="previous" href="02-原文备份.html">← 上一篇：井字棋环境</a><a class="next" href="04-原文备份.html">下一篇：开始训练 →</a></nav>
+</body></html>
