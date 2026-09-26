@@ -9,12 +9,21 @@
 - `texture/`：游戏使用的图片和字体。
 - `handbooks/`：高中生适用的 Q-table 概念入门、六篇编号文章的阅读提要与离线备份、图片和来源校验清单。
 - `scripts/backup_articles.py`：重新下载文章及图片的脚本，联网时运行。
+- `scripts/turbo_setup.sh`：Linux/macOS 的 Miniconda 安装及 Conda、pip 镜像源配置菜单。
 
 源码与素材取自原作者 [Gitee 项目](https://gitee.com/wsy950409/q-table-play-tic-tac-toe)的提交 `41f6f0e05687014267fb96bfd9a5849deb84a373`，保留其 [木兰宽松许可证第 2 版](LICENSE)及[原 README 备份](handbooks/99-原项目说明.md)。游戏源码按原样保存；博客中的环境和训练代码没有另行拼接成运行脚本。
 
 ## 部署与运行
 
 三个系统均推荐先安装 Anaconda 或 Miniconda，再用 Conda 创建独立的 Python 3.11 环境。游戏需要图形桌面，并须从仓库根目录启动，以便读取 Q 表和 `texture/` 素材。
+
+Linux/macOS 尚未安装 Miniconda 时，可在仓库根目录运行：
+
+```bash
+bash scripts/turbo_setup.sh
+```
+
+菜单选 `1` 从清华镜像下载安装包。安装完成后退出脚本，关闭并重新打开终端，运行 `conda --version` 验证；需要换源时再次运行脚本，选 `2` 配置清华或中科大 Conda 源，选 `3` 配置 pip 源。换源会备份并改写当前用户的 `.condarc` 或 pip 配置；已有配置请先查看。
 
 macOS / Linux（终端）：
 
