@@ -15,6 +15,13 @@
 
 ## 部署与运行
 
+先安装 Git，在终端克隆项目并进入仓库目录；后续命令都在这个目录执行：
+
+```bash
+git clone https://github.com/DaveBraid/TicTacToe.git
+cd TicTacToe
+```
+
 三个系统均推荐先安装 Anaconda 或 Miniconda，再用 Conda 创建独立的 Python 3.11 环境。游戏需要图形桌面，并须从仓库根目录启动，以便读取 Q 表和 `texture/` 素材。
 
 Linux/macOS 尚未安装 Miniconda 时，可在仓库根目录运行：
@@ -44,10 +51,6 @@ python TicTacToeGame.py
 ```
 
 首次使用 Conda 时，若 `conda activate` 不可用，先运行 `conda init` 并重新打开终端。启动后在界面选择双方策略（Q、random 或 human），点击 START 对战；CHEAT 可显示蓝方当前局面的 Q 值。
-
-## 离线阅读
-
-直接用浏览器打开 [handbooks/01-原文备份.html](handbooks/01-原文备份.html)，其余五篇可从 [学习路线](handbooks/README.md) 进入。正文图片均指向仓库内的 `handbooks/assets/`；`manifest.json` 记录原始网址和 SHA-256。首次备份后不需要联网阅读或启动游戏。
 
 ## 鸣谢
 
