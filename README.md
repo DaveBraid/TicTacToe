@@ -7,10 +7,10 @@
 - `TicTacToe Game.py`：原作者的人机、机机对战程序，支持查看 Q 值。
 - `Q_table_dict.pkl`：原作者提供的预训练 Q 表；启动游戏时直接读取。
 - `texture/`：游戏使用的图片和字体。
-- `handbooks/`：六篇编号文章的阅读提要、离线 HTML 正文、图片和来源校验清单。
+- `handbooks/`：高中生适用的 Q-table 概念入门、六篇编号文章的阅读提要与离线备份、图片和来源校验清单。
 - `scripts/backup_articles.py`：重新下载文章及图片的脚本，联网时运行。
 
-源码与素材取自原作者 [Gitee 项目](https://gitee.com/wsy950409/q-table-play-tic-tac-toe)的提交 `41f6f0e05687014267fb96bfd9a5849deb84a373`，保留其 [木兰宽松许可证第 2 版](LICENSE)及[原 README 备份](handbooks/00-原项目说明.md)。游戏源码按原样保存；博客中的环境和训练代码没有另行拼接成运行脚本。
+源码与素材取自原作者 [Gitee 项目](https://gitee.com/wsy950409/q-table-play-tic-tac-toe)的提交 `41f6f0e05687014267fb96bfd9a5849deb84a373`，保留其 [木兰宽松许可证第 2 版](LICENSE)及[原 README 备份](handbooks/99-原项目说明.md)。游戏源码按原样保存；博客中的环境和训练代码没有另行拼接成运行脚本。
 
 ## 部署与运行
 
