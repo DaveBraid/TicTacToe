@@ -40,7 +40,7 @@
 
 “偶尔尝试”叫**探索**，“优先选高分”叫**利用**。Q-learning 是更新这些分数的一种方法。现在无需背更新公式；先理解程序会用对局结果逐步修正经验表。
 
-## 两分钟自测
+## 小思考题
 
 1. 为什么不能只给 `7` 号格固定打高分？
 2. 如果所有合法动作一开始都是 `0`，为什么仍要尝试不同走法？
@@ -48,10 +48,13 @@
 
 参考答案：① 局面不同，同一位置的好坏也不同；② 需要收集经验，找出更好的走法；③ 向更高的值变化。
 
-## 接着读什么
+## 下一步行动
+
+你已经对 Q-Leaning 有了一定感性认识，可以返回 [README.md](./README.md) 按照推荐顺序开始阅读 html 内容了。
+
+## 延伸阅读资料
 
 - **首选中文资料：**[蘑菇书《Easy RL》第 3 章：表格型方法](https://github.com/datawhalechina/easy-rl/blob/master/docs/chapter3/chapter3.md)。先读 **3.2 Q 表格**，看懂行是状态、列是动作即可；**3.4.2 Q 学习**可在读完本项目第 04 篇后选读。其余公式和 Sarsa 暂时跳过。[在线阅读版](https://datawhalechina.github.io/easy-rl/#/chapter3/chapter3)。
-- **贴近本项目：**[03 Q 表框架](03-Q-表框架.md)和[04 开始训练](04-开始训练.md)。先看棋盘如何变成 Q 表中的一行，再看如何通过对局更新分数。
 - **英文图解备选：**[Hugging Face：Introducing Q-Learning](https://huggingface.co/learn/deep-rl-course/unit2/q-learning)。其中的小迷宫和 Q-table 图适合辅助理解；代码实践可以暂缓。
 
 本页为本仓库原创入门讲解。外部资料请到原站阅读，未复制其正文或图片。

@@ -4,7 +4,7 @@
 
 ## 仓库内容
 
-- `TicTacToe Game.py`：原作者的人机、机机对战程序，支持查看 Q 值。
+- `TicTacToeGame.py`：原作者的人机、机机对战程序，支持查看 Q 值。
 - `Q_table_dict.pkl`：原作者提供的预训练 Q 表；启动游戏时直接读取。
 - `texture/`：游戏使用的图片和字体。
 - `handbooks/`：高中生适用的 Q-table 概念入门、六篇编号文章的阅读提要与离线备份、图片和来源校验清单。
@@ -31,7 +31,7 @@ macOS / Linux（终端）：
 conda create -n tictactoe python=3.11 -y
 conda activate tictactoe
 python -m pip install -r requirements.txt
-python "TicTacToe Game.py"
+python TicTacToeGame.py
 ```
 
 Windows（Anaconda Prompt 或已启用 Conda 的 PowerShell）：
@@ -40,7 +40,7 @@ Windows（Anaconda Prompt 或已启用 Conda 的 PowerShell）：
 conda create -n tictactoe python=3.11 -y
 conda activate tictactoe
 python -m pip install -r requirements.txt
-python ".\TicTacToe Game.py"
+python TicTacToeGame.py
 ```
 
 首次使用 Conda 时，若 `conda activate` 不可用，先运行 `conda init` 并重新打开终端。启动后在界面选择双方策略（Q、random 或 human），点击 START 对战；CHEAT 可显示蓝方当前局面的 Q 值。
